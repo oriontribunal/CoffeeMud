@@ -1401,13 +1401,15 @@ public class CommonMsgs extends StdLibrary implements CommonCommands
 		for(int i=exitDirs.size()-1;i>=0;i--)
 		{
 			R = room.getRoomInDir(exitDirs.elementAt(i).intValue());
-			if((R!=null)&&(R.displayText(mob).equalsIgnoreCase(title)))
+			E = room.getExitInDir(exitDirs.elementAt(i).intValue());
+			if((R!=null)&&(R.displayText(mob).equalsIgnoreCase(title))&&(E.displayText()==""))
 				continues.addElement(exitDirs.remove(i));
 		}
 
 		if(continues.size()>0)
 		{
-			str.append("  ^L"+CMStrings.capitalizeFirstLetter(room.displayText(mob)).trim()+" continues ");
+			str.append("\n\n");
+			str.append("^L"+CMStrings.capitalizeFirstLetter(room.displayText(mob)).trim()+" continues ");
 			if(continues.size()==1)
 			{
 				if(useShipNames)
@@ -1433,7 +1435,11 @@ public class CommonMsgs extends StdLibrary implements CommonCommands
 		final boolean style=CMLib.dice().rollPercentage()>50;
 		if(exitDirs.size()>0)
 		{
-			str.append("  ^L"+CMStrings.capitalizeFirstLetter(getExitFragment(mob,room,exitDirs.firstElement().intValue(),style)).trim());
+			if(continues.size() == 0)
+				str.append("\n\n");
+			else
+				str.append(" ");
+			str.append("^L"+CMStrings.capitalizeFirstLetter(getExitFragment(mob,room,exitDirs.firstElement().intValue(),style)).trim());
 			if(exitDirs.size()>1)
 			{
 				str.append("^L, ");
