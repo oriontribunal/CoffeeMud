@@ -234,7 +234,7 @@ public class GenSailingShip extends StdBoardable
 			{
 				final String dist = ""+this.getTacticalDistance(targetShip);
 				final String dir=CMLib.directions().getDirectionName(targetShip.directionFacing);
-				final String speed=""+targetShip.getShipSpeed();
+				final String speed=""+CMLib.tracking().getSailingShipSpeed(targetShip);
 				final String dirFromYou = CMLib.directions().getDirectionName(Directions.getRelative11Directions(myCoords, targetCoords));
 				return L("@x1 is @x2 of you sailing @x3 at a speed of @x4 and a distance of @x5.",targetShip.name(),dirFromYou,dir,speed,dist);
 			}
@@ -242,18 +242,17 @@ public class GenSailingShip extends StdBoardable
 		return "";
 	}
 
-	protected int getShipSpeed()
+	protected String getDirectionToTarget(Rideable targetedShip)
 	{
-		int speed=phyStats().ability();
-		if(this.subjectToWearAndTear())
+		if((targetedShip != null)&&(targetedShip instanceof GenSailingShip))
 		{
-			if(this.usesRemaining()<10)
-				return 0;
-			speed=(int)Math.round(speed * CMath.div(usesRemaining(), 100));
+			final GenSailingShip targetShip = (GenSailingShip)targetedShip;
+			final int[] targetCoords = targetShip.getMyCoords();
+			final int[] myCoords = this.getMyCoords();
+			if((myCoords!=null)&&(targetCoords != null))
+				return CMLib.directions().getDirectionName(Directions.getRelative11Directions(myCoords, targetCoords));
 		}
-		if(speed <= 0)
-			return 1;
-		return speed;
+		return "";
 	}
 
 	protected Room getRandomDeckRoom()
@@ -488,7 +487,13 @@ public class GenSailingShip extends StdBoardable
 						msg.source().tell(L("The ship has moved!"));
 						return false;
 					}
-					this.courseDirection=-1;
+					if((courseDirection >=0)||(courseDirections.size()>0))
+					{
+						if(!this.amInTacticalMode())
+							msg.source().tell(L("Your previous course has been cancelled."));
+						courseDirection = -1;
+						courseDirections.clear();
+					}
 					int dir=CMLib.directions().getCompassDirectionCode(secondWord);
 					if(dir<0)
 					{
@@ -539,6 +544,13 @@ public class GenSailingShip extends StdBoardable
 					{
 						msg.source().tell(L("The ship has moved!"));
 						return false;
+					}
+					if((courseDirection >=0)||(courseDirections.size()>0))
+					{
+						if(!this.amInTacticalMode())
+							msg.source().tell(L("Your previous course has been cancelled."));
+						courseDirection = -1;
+						courseDirections.clear();
 					}
 					final Room R=CMLib.map().roomLocation(this);
 					if(R==null)
@@ -592,7 +604,13 @@ public class GenSailingShip extends StdBoardable
 						msg.source().tell(L("The ship has moved!"));
 						return false;
 					}
-					this.courseDirection=-1;
+					if((courseDirection >=0)||(courseDirections.size()>0))
+					{
+						if(!this.amInTacticalMode())
+							msg.source().tell(L("Your previous course has been cancelled."));
+						courseDirection = -1;
+						courseDirections.clear();
+					}
 					final Room R=CMLib.map().roomLocation(this);
 					if(R==null)
 					{
@@ -607,7 +625,7 @@ public class GenSailingShip extends StdBoardable
 					this.courseDirections.clear();
 					if(amInTacticalMode())
 					{
-						final int speed=getShipSpeed();
+						final int speed=CMLib.tracking().getSailingShipSpeed(this);
 						final String dirFacingName = CMLib.directions().getDirectionName(directionFacing);
 						if(dirIndex >= cmds.size())
 						{
@@ -703,7 +721,7 @@ public class GenSailingShip extends StdBoardable
 			if(cmd != null)
 			{
 				cmds.add(0, "METAMSGCOMMAND");
-				double speed=getShipSpeed();
+				double speed=CMLib.tracking().getSailingShipSpeed(this);
 				speed = msg.source().phyStats().speed() / speed;
 				msg.source().enqueCommand(cmds, MUDCmdProcessor.METAFLAG_ASMESSAGE, speed);
 				return false;
@@ -808,6 +826,8 @@ public class GenSailingShip extends StdBoardable
 				msg.source().tell(CMLib.lang().L("You'll need some assistance to board a ship from @x1, such as some means to climb up.",ride.name(msg.source())));
 				return false;
 			}
+			else
+				msg.source().setRiding(null); // if you're climbing, you're not riding any more
 		}
 		else
 		if((msg.sourceMinor()==CMMsg.TYP_COMMANDFAIL)
@@ -986,7 +1006,7 @@ public class GenSailingShip extends StdBoardable
 				mob.setRiding(this);
 				mob.basePhyStats().setDisposition(mob.basePhyStats().disposition()|PhyStats.IS_SWIMMING);
 				mob.phyStats().setDisposition(mob.phyStats().disposition()|PhyStats.IS_SWIMMING);
-				final CMMsg maneuverMsg=CMClass.getMsg(mob,I,null,CMMsg.MSG_ADVANCE,null,CMMsg.MSG_ADVANCE,null,CMMsg.MSG_ADVANCE,L("<S-NAME> engage(s) @x1.",I.Name()));
+				final CMMsg maneuverMsg=CMClass.getMsg(mob,I,null,CMMsg.MSG_ADVANCE,null,CMMsg.MASK_MALICIOUS|CMMsg.MSG_ADVANCE,null,CMMsg.MSG_ADVANCE,L("<S-NAME> engage(s) @x1.",I.Name()));
 				if(thisRoom.okMessage(mob, maneuverMsg))
 				{
 					thisRoom.send(mob, maneuverMsg);
@@ -1202,7 +1222,7 @@ public class GenSailingShip extends StdBoardable
 			&& (area != null) 
 			&& (courseDirection != -1) )
 			{
-				final int speed=getShipSpeed();
+				final int speed=CMLib.tracking().getSailingShipSpeed(this);
 				for(int s=0;s<speed && (courseDirection>=0);s++)
 				{
 					switch(sail(courseDirection & 127))
@@ -1490,7 +1510,7 @@ public class GenSailingShip extends StdBoardable
 			case CMMsg.TYP_EXAMINE:
 				if((CMLib.map().areaLocation(msg.source())==area))
 				{
-					StringBuilder visualCondition = new StringBuilder("");
+					final StringBuilder visualCondition = new StringBuilder("");
 					if(this.anchorDown)
 						visualCondition.append(L("\n\r^HThe anchor on @x1 is lowered, holding her in place.^.^?",name(msg.source())));
 					else
@@ -1501,9 +1521,14 @@ public class GenSailingShip extends StdBoardable
 						final double pct=(CMath.div(usesRemaining(),100.0));
 						appendCondition(visualCondition,pct,name(msg.source()));
 					}
-					msg.addTrailerMsg(CMClass.getMsg(msg.source(), null, null, 
-							CMMsg.MSG_OK_VISUAL, visualCondition.toString(), 
-							CMMsg.NO_EFFECT, null, CMMsg.NO_EFFECT, null));
+					msg.addTrailerRunnable(new Runnable()
+					{
+						@Override
+						public void run()
+						{
+							msg.source().tell(visualCondition.toString());
+						}
+					});
 				}
 				break;
 			case CMMsg.TYP_LEAVE:
@@ -1534,8 +1559,9 @@ public class GenSailingShip extends StdBoardable
 					Weapon weapon=null;
 					if((msg.tool() instanceof Weapon))
 						weapon=(Weapon)msg.tool();
-					if((weapon!=null)&&(msg.source().riding()!=null))
+					if((weapon!=null)&&(msg.source().riding()!=null)&&(owner() instanceof Room))
 					{
+						final Room shipRoom=(Room)owner();
 						final boolean isHit=msg.value()>0;
 						if(isHit && CMLib.combat().isAShipSiegeWeapon(weapon) 
 						&& (((AmmunitionWeapon)weapon).ammunitionCapacity() > 1))
@@ -1565,7 +1591,7 @@ public class GenSailingShip extends StdBoardable
 									final Pair<MOB,Room> randomPair = (targets.size()>0)? targets.get(CMLib.dice().roll(1,targets.size(),-1)) : null;
 									if((CMLib.dice().rollPercentage() < chanceToHit)&&(randomPair != null))
 									{
-										msg.source().setLocation(randomPair.second);
+										msg.source().setLocation(shipRoom);
 										double pctLoss = CMath.div(msg.value(), getMaxHullPoints());
 										int pointsLost = (int)Math.round(pctLoss * msg.source().maxState().getHitPoints());
 										CMLib.combat().postWeaponDamage(msg.source(), randomPair.first, weapon, pointsLost);
@@ -1573,7 +1599,7 @@ public class GenSailingShip extends StdBoardable
 									else
 									if(randomPair != null)
 									{
-										msg.source().setLocation(randomPair.second);
+										msg.source().setLocation(shipRoom);
 										CMLib.combat().postWeaponAttackResult(msg.source(), randomPair.first, weapon, false);
 									}
 									else
@@ -1809,7 +1835,7 @@ public class GenSailingShip extends StdBoardable
 	{
 		final int[] fromCoords = this.getMyCoords();
 		final PairList<Item,int[]> coords = this.coordinates;
-		int lowest = CMLib.map().roomLocation(this).maxRange();
+		int lowest = Integer.MAX_VALUE;
 		if((coords != null) && (fromCoords != null))
 		{
 			for(int p=0;p<coords.size();p++)
@@ -1833,6 +1859,8 @@ public class GenSailingShip extends StdBoardable
 				}
 			}
 		}
+		if(lowest == Integer.MAX_VALUE)
+			return CMLib.map().roomLocation(this).maxRange();
 		return lowest;
 	}
 
@@ -1901,10 +1929,8 @@ public class GenSailingShip extends StdBoardable
 					if(directionFacing == direction)
 					{
 						final int[] newCoords = Directions.adjustXYByDirections(tacticalCoords[0], tacticalCoords[1], direction);
-						final int[] adj=this.getCoordAdjustments(newCoords);
-						final String coords = (newCoords[0]+adj[0])+","+(newCoords[1]+adj[1]);
-						final CMMsg maneuverMsg=CMClass.getMsg(mob,thisRoom,null,CMMsg.MSG_ADVANCE,null,CMMsg.MSG_ADVANCE,directionName,
-																CMMsg.MSG_ADVANCE,L("<S-NAME> maneuver(s) @x1 to (@x2).",directionName,coords));
+						final CMMsg maneuverMsg=CMClass.getMsg(mob,thisRoom,null,CMMsg.MSG_ADVANCE,newCoords[0]+","+newCoords[1],CMMsg.MSG_ADVANCE,directionName,
+																CMMsg.MSG_ADVANCE,L("<S-NAME> maneuver(s) @x1.",directionName));
 						if(thisRoom.okMessage(mob, maneuverMsg))
 						{
 							thisRoom.send(mob, maneuverMsg);
@@ -1941,6 +1967,7 @@ public class GenSailingShip extends StdBoardable
 			{
 				directionFacing = direction;
 			}
+			this.clearTacticalMode();
 			final Room destRoom=thisRoom.getRoomInDir(direction);
 			final Exit exit=thisRoom.getExitInDir(direction);
 			if((destRoom!=null)&&(exit!=null))
@@ -2130,6 +2157,8 @@ public class GenSailingShip extends StdBoardable
 											"AREA","OWNER","PRICE","PUTSTR","MOUNTSTR","DISMOUNTSTR","DEFCLOSED","DEFLOCKED",
 											"EXITNAME"
 										  };
+	private final static String[] MISCCODES = { "DISTANCETOTARGET","DIRECTIONFACING","DIRECTIONTOTARGET","ANCHORDOWN" };
+	
 	@Override
 	public String getStat(String code)
 	{
@@ -2170,6 +2199,21 @@ public class GenSailingShip extends StdBoardable
 		case 15:
 			return "" + doorName();
 		default:
+			int x=CMParms.indexOf(MISCCODES, code.toUpperCase().trim());
+			if(x>=0)
+			{
+				switch(x)
+				{
+				case 0:
+					return "" + this.getTacticalDistance(this.targetedShip);
+				case 1:
+					return (this.directionFacing < 0) ? "" : CMLib.directions().getDirectionName(this.directionFacing);
+				case 2:
+					return "" + this.getDirectionToTarget(this.targetedShip);
+				case 3:
+					return "" + this.anchorDown;
+				}
+			}
 			return CMProps.getStatCodeExtensionValue(getStatCodes(), xtraValues, code);
 		}
 	}
@@ -2229,6 +2273,26 @@ public class GenSailingShip extends StdBoardable
 			this.doorName = val;
 			break;
 		default:
+			int x=CMParms.indexOf(MISCCODES, code.toUpperCase().trim());
+			if(x>=0)
+			{
+				switch(x)
+				{
+				case 0:
+					// set distance to target;
+					break;
+				case 1:
+					this.directionFacing = CMath.s_int(val);
+					break;
+				case 2:
+					// set direction to target
+					break;
+				case 3:
+					this.anchorDown=CMath.s_bool(val);
+					break;
+				}
+				return;
+			}
 			CMProps.setStatCodeExtensionValue(getStatCodes(), xtraValues, code, val);
 			break;
 		}

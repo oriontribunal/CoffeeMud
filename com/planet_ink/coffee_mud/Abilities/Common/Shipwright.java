@@ -155,8 +155,8 @@ public class Shipwright extends CraftingSkill implements ItemCraftor, MendingSki
 						if(activity == CraftingActivity.MENDING)
 						{
 							if((buildingI instanceof BoardableShip)
-							&&(buildingI.usesRemaining()<90))
-								buildingI.setUsesRemaining(buildingI.usesRemaining()+10);
+							&&(buildingI.usesRemaining()<95))
+								buildingI.setUsesRemaining(buildingI.usesRemaining()+5);
 							else
 								buildingI.setUsesRemaining(100);
 							CMLib.achievements().possiblyBumpAchievement(mob, AchievementLibrary.Event.MENDER, 1, this);
@@ -233,7 +233,7 @@ public class Shipwright extends CraftingSkill implements ItemCraftor, MendingSki
 			return false;
 		if((E instanceof BoardableShip)
 		&&(E instanceof Rideable)
-		&&(((Rideable)E).rideBasis()==Rideable.RIDEABLE_WATER))
+		&&(((Rideable)E).rideBasis()==Rideable.RIDEABLE_ENTERIN))
 			return true;
 		if((!(E instanceof Item))||(!mayICraft((Item)E)))
 		{
@@ -293,10 +293,10 @@ public class Shipwright extends CraftingSkill implements ItemCraftor, MendingSki
 				mask="";
 			}
 			final int[] cols={
-					CMLib.lister().fixColWidth(16,mob.session()),
-					CMLib.lister().fixColWidth(5,mob.session()),
-					CMLib.lister().fixColWidth(8,mob.session())
-				};
+				CMLib.lister().fixColWidth(16,mob.session()),
+				CMLib.lister().fixColWidth(5,mob.session()),
+				CMLib.lister().fixColWidth(8,mob.session())
+			};
 			final StringBuffer buf=new StringBuffer(L("@x1 @x2 @x3 Wood required\n\r",CMStrings.padRight(L("Item"),cols[0]),CMStrings.padRight(L("Level"),cols[1]),CMStrings.padRight(L("Capacity"),cols[2])));
 			for(int r=0;r<recipes.size();r++)
 			{
@@ -332,9 +332,7 @@ public class Shipwright extends CraftingSkill implements ItemCraftor, MendingSki
 			messedUp=false;
 			final Vector<String> newCommands=CMParms.parse(CMParms.combine(commands,1));
 			final Room R=mob.location();
-			if((R.getArea() instanceof BoardableShip)
-			&&(R.getArea() instanceof Rideable)
-			&&(((Rideable)R.getArea()).rideBasis()==Rideable.RIDEABLE_WATER))
+			if(R.getArea() instanceof BoardableShip)
 			{
 				buildingI=getTarget(mob,CMLib.map().roomLocation(((BoardableShip)R.getArea()).getShipItem()),givenTarget,newCommands,Wearable.FILTER_UNWORNONLY);
 				if(buildingI != ((BoardableShip)R.getArea()).getShipItem())
@@ -470,7 +468,8 @@ public class Shipwright extends CraftingSkill implements ItemCraftor, MendingSki
 			}
 
 			final String woodRequiredStr = foundRecipe.get(RCP_WOOD);
-			final List<Object> componentsFoundList=getAbilityComponents(mob, woodRequiredStr, "make "+CMLib.english().startWithAorAn(recipeName),autoGenerate);
+			final int[] compData = new int[CF_TOTAL];
+			final List<Object> componentsFoundList=getAbilityComponents(mob, woodRequiredStr, "make "+CMLib.english().startWithAorAn(recipeName),autoGenerate,compData);
 			if(componentsFoundList==null)
 				return false;
 			int woodRequired=CMath.s_int(woodRequiredStr);
@@ -503,7 +502,8 @@ public class Shipwright extends CraftingSkill implements ItemCraftor, MendingSki
 				return false;
 			}
 			duration=getDuration(CMath.s_int(foundRecipe.get(RCP_TICKS)),mob,CMath.s_int(foundRecipe.get(RCP_LEVEL)),6);
-			String itemName=replacePercent(foundRecipe.get(RCP_FINALNAME),RawMaterial.CODES.NAME(data[0][FOUND_CODE])).toLowerCase();
+			buildingI.setMaterial(super.getBuildingMaterial(woodRequired, data, compData));
+			String itemName=replacePercent(foundRecipe.get(RCP_FINALNAME),RawMaterial.CODES.NAME(buildingI.material())).toLowerCase();
 			if(misctype.equalsIgnoreCase("BUNDLE"))
 				itemName="a "+woodRequired+"# "+itemName;
 			else
@@ -515,9 +515,8 @@ public class Shipwright extends CraftingSkill implements ItemCraftor, MendingSki
 			playSound="saw.wav";
 			buildingI.setDisplayText(L("@x1 lies here",itemName));
 			buildingI.setDescription(itemName+". ");
-			buildingI.basePhyStats().setWeight(getStandardWeight(woodRequired,bundling));
+			buildingI.basePhyStats().setWeight(getStandardWeight(woodRequired+compData[CF_AMOUNT],bundling));
 			buildingI.setBaseValue(CMath.s_int(foundRecipe.get(RCP_VALUE)));
-			buildingI.setMaterial(data[0][FOUND_CODE]);
 			buildingI.basePhyStats().setLevel(CMath.s_int(foundRecipe.get(RCP_LEVEL)));
 			buildingI.setSecretIdentity(getBrand(mob));
 			final long canContain=getContainerType(foundRecipe.get(RCP_CONTAINMASK));
